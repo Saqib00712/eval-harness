@@ -1,0 +1,6 @@
+# Optional: real embeddings (OpenAIEmbeddingProvider, Day 6) and, later,
+# the real LLM judge (Day 8). Not needed for the base package, the
+# deterministic evaluators, or any unit test -- see providers/embedding.py's
+# FakeEmbeddingProvider and docs/day6.md.
+#   pip install -r requirements-openai.txt
+openai>=1.50,<2

@@ -1,0 +1,7 @@
+# Optional: the real HTTP transport (HttpxHttpClient, Day 19) for
+# adapters/production_rag.py's ProductionRagAdapter, when evaluating a
+# real, running production-rag deployment. Not needed for the base
+# package or any unit test -- see providers/http.py's FakeHttpClient and
+# docs/day19.md.
+#   pip install -r requirements-httpx.txt
+httpx>=0.27,<1

@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>eval-harness dashboard</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --panel: #ffffff;
+    --border: #e3e3e6;
+    --text: #1a1a1e;
+    --muted: #6b6b74;
+    --accent: #4f46e5;
+    --good: #16a34a;
+    --good-bg: #ecfdf3;
+    --bad: #dc2626;
+    --bad-bg: #fef2f2;
+    --warn: #d97706;
+    --warn-bg: #fffbeb;
+    --track: #eceef1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121214;
+      --panel: #1b1b1f;
+      --border: #2d2d33;
+      --text: #ededf0;
+      --muted: #9a9aa5;
+      --accent: #818cf8;
+      --good: #4ade80;
+      --good-bg: #0f2a1a;
+      --bad: #f87171;
+      --bad-bg: #2d1414;
+      --warn: #fbbf24;
+      --warn-bg: #2a2110;
+      --track: #26262c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+  header h1 { font-size: 20px; margin: 0 0 2px; }
+  header p { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 12px;
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--muted);
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.drag { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+  .dropzone strong { color: var(--text); }
+  .dropzone input { display: none; }
+  .dz-hint { margin-top: 6px; font-size: 12px; }
+
+  .loaded-files { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .chip {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 12px; font-size: 12.5px; display: flex; align-items: center; gap: 8px;
+  }
+  .chip button {
+    border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px;
+    line-height: 1; padding: 0;
+  }
+  .chip button:hover { color: var(--bad); }
+
+  .error-box {
+    margin-top: 12px; padding: 10px 14px; border-radius: 8px;
+    background: var(--bad-bg); color: var(--bad); font-size: 13px;
+  }
+
+  section { margin-top: 28px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .card .value { font-size: 22px; font-weight: 600; }
+  .card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .delta-up { color: var(--good); }
+  .delta-down { color: var(--bad); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
+  tr:last-child td { border-bottom: none; }
+  .bar-cell { display: flex; align-items: center; gap: 8px; }
+  .bar-track { flex: 1; height: 6px; background: var(--track); border-radius: 999px; overflow: hidden; min-width: 60px; }
+  .bar-fill { height: 100%; border-radius: 999px; }
+
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  }
+  .badge.pass { background: var(--good-bg); color: var(--good); }
+  .badge.fail { background: var(--bad-bg); color: var(--bad); }
+  .badge.dependency_failure { background: var(--bad-bg); color: var(--bad); }
+  .badge.evaluation_failure { background: var(--warn-bg); color: var(--warn); }
+  .badge.threshold_miss { background: var(--bad-bg); color: var(--bad); }
+
+  .gate-panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+  }
+  .gate-inputs { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .gate-inputs label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .gate-inputs input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    color: var(--text); font-size: 13px; width: 110px;
+  }
+  .verdict {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; padding: 8px 14px;
+    border-radius: 8px; margin-bottom: 10px;
+  }
+  .verdict.pass { background: var(--good-bg); color: var(--good); }
+  .verdict.fail { background: var(--bad-bg); color: var(--bad); }
+  .violations { margin: 8px 0 0; padding-left: 18px; color: var(--bad); font-size: 13px; }
+
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; font-size: 13.5px; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: center; }
+
+  .id-list { font-size: 12.5px; color: var(--muted); }
+  .id-list code { background: var(--track); padding: 1px 6px; border-radius: 4px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>eval-harness dashboard</h1>
+    <p>Load one run to inspect it, or two runs of the same dataset to compare them. Everything here runs in your browser — no server, no network call, nothing uploaded.</p>
+  </header>
+
+  <div id="dropzone" class="dropzone">
+    <div><strong>Drop run JSON files here</strong>, or click to choose</div>
+    <div class="dz-hint">Files saved by <code>eval_harness.storage.save_run()</code> or produced by the CLI's <code>demo</code> command</div>
+    <input id="file-input" type="file" accept=".json,application/json" multiple />
+  </div>
+  <div id="loaded-files" class="loaded-files"></div>
+  <div id="error-box"></div>
+
+  <div id="content"></div>
+
+  <footer>eval-harness — Phase 40/41 companion dashboard. Reads <code>EvaluationRun</code> JSON directly; no backend, by the same CLI-only scope decision as the rest of this project.</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const state = { runs: [] }; // [{file, run}]
+
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("file-input");
+  const loadedFilesEl = document.getElementById("loaded-files");
+  const errorBox = document.getElementById("error-box");
+  const content = document.getElementById("content");
+
+  dropzone.addEventListener("click", () => fileInput.click());
+  dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("drag"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("drag");
+    handleFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+
+  function handleFiles(fileList) {
+    errorBox.innerHTML = "";
+    const files = Array.from(fileList).slice(0, 2 - state.runs.length);
+    if (fileList.length > files.length) {
+      showError("Only two runs can be compared at a time — extra file(s) ignored. Remove a loaded run first to swap it.");
+    }
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const run = JSON.parse(reader.result);
+          validateRun(run, file.name);
+          state.runs.push({ file: file.name, run });
+          if (state.runs.length > 2) state.runs.shift();
+          render();
+        } catch (err) {
+          showError(`${file.name}: ${err.message}`);
+        }
+      };
+      reader.onerror = () => showError(`${file.name}: could not be read.`);
+      reader.readAsText(file);
+    });
+  }
+
+  function validateRun(run, name) {
+    const required = ["run_id", "dataset_id", "system_name", "pass_rate", "average_score", "results"];
+    for (const key of required) {
+      if (!(key in run)) {
+        throw new Error(`doesn't look like an EvaluationRun JSON (missing "${key}")`);
+      }
+    }
+  }
+
+  function showError(msg) {
+    errorBox.innerHTML = `<div class="error-box">${escapeHtml(msg)}</div>`;
+  }
+
+  function removeRun(idx) {
+    state.runs.splice(idx, 1);
+    errorBox.innerHTML = "";
+    render();
+  }
+
+  function render() {
+    renderChips();
+    if (state.runs.length === 0) {
+      content.innerHTML = `<div class="empty">Load a run JSON file to see its results here.</div>`;
+    } else if (state.runs.length === 1) {
+      content.innerHTML = renderSingleRun(state.runs[0].run);
+    } else {
+      content.innerHTML = renderComparison(state.runs[0].run, state.runs[1].run);
+    }
+    wireGateInputs();
+  }
+
+  function renderChips() {
+    loadedFilesEl.innerHTML = state.runs
+      .map((r, i) => `<span class="chip">${escapeHtml(r.file)} <button data-idx="${i}" title="Remove">&times;</button></span>`)
+      .join("");
+    loadedFilesEl.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", () => removeRun(Number(btn.dataset.idx)));
+    });
+  }
+
+  // ---------- formatting helpers ----------
+
+  function pct(x) { return (x * 100).toFixed(1) + "%"; }
+  function num(x, d = 2) { return x == null ? "—" : Number(x).toFixed(d); }
+  function ms(x) { return x == null ? "—" : `${Math.round(x)} ms`; }
+  function usd(x) { return x == null ? "—" : `$${Number(x).toFixed(5)}`; }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function barColor(v) {
+    if (v >= 0.9) return "var(--good)";
+    if (v >= 0.6) return "var(--warn)";
+    return "var(--bad)";
+  }
+
+  function perEvaluatorPassRates(run) {
+    const tally = {};
+    for (const r of run.results) {
+      tally[r.evaluator] = tally[r.evaluator] || [];
+      tally[r.evaluator].push(r.passed);
+    }
+    const out = {};
+    for (const [name, flags] of Object.entries(tally)) {
+      out[name] = flags.filter(Boolean).length / flags.length;
+    }
+    return out;
+  }
+
+  function failureSummary(run) {
+    const summary = {};
+    for (const r of run.results) {
+      if (r.passed) continue;
+      const cat = r.failure_category || "uncategorized";
+      summary[cat] = summary[cat] || { count: 0, test_ids: [] };
+      summary[cat].count += 1;
+      if (!summary[cat].test_ids.includes(r.test_id)) summary[cat].test_ids.push(r.test_id);
+    }
+    return summary;
+  }
+
+  // ---------- single-run view ----------
+
+  function renderSingleRun(run) {
+    const evalRates = perEvaluatorPassRates(run);
+    const failures = failureSummary(run);
+    const failedResults = run.results.filter((r) => !r.passed);
+
+    return `
+      ${runHeader(run)}
+      <section>
+        <h2>Summary</h2>
+        <div class="cards">
+          ${card("Pass rate", pct(run.pass_rate), `${run.passed_tests}/${run.total_tests} tests`)}
+          ${card("Average score", num(run.average_score, 4))}
+          ${card("Avg. system latency", ms(run.average_system_latency_ms), run.max_system_latency_ms != null ? `max ${ms(run.max_system_latency_ms)}` : "")}
+          ${card("Estimated cost", usd(run.estimated_cost), `${run.total_tokens ?? 0} tokens`)}
+        </div>
+      </section>
+
+      <section>
+        <h2>Per-evaluator pass rate</h2>
+        ${evaluatorTable(evalRates)}
+      </section>
+
+      <section>
+        <h2>Failure breakdown</h2>
+        ${failureTable(failures)}
+      </section>
+
+      ${quailityGateSection([{ run }], null)}
+
+      <section>
+        <h2>Failed test cases ${failedResults.length ? `(${failedResults.length})` : ""}</h2>
+        ${failedResultsTable(failedResults)}
+      </section>
+    `;
+  }
+
+  function runHeader(run, compareRun) {
+    return `
+      <section style="margin-top:0">
+        <h2>Run</h2>
+        <table>
+          <tbody>
+            <tr><th style="width:140px">Dataset</th><td>${escapeHtml(run.dataset_id)} <span style="color:var(--muted)">v${escapeHtml(run.dataset_version || "?")}</span></td></tr>
+            <tr><th>System</th><td>${escapeHtml(run.system_name)} <span style="color:var(--muted)">${escapeHtml(run.system_version || "")}</span></td></tr>
+            <tr><th>Run ID</th><td style="font-family:monospace;font-size:12px">${escapeHtml(run.run_id)}</td></tr>
+            <tr><th>Completed</th><td>${escapeHtml(run.completed_at || "—")}</td></tr>
+          </tbody>
+        </table>
+      </section>
+    `;
+  }
+
+  function card(label, value, sub) {
+    return `<div class="card"><div class="label">${escapeHtml(label)}</div><div class="value">${value}</div>${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ""}</div>`;
+  }
+
+  function evaluatorTable(rates) {
+    const names = Object.keys(rates).sort();
+    if (!names.length) return `<div class="empty">No evaluator results in this run.</div>`;
+    return `
+      <table>
+        <thead><tr><th>Evaluator</th><th>Pass rate</th></tr></thead>
+        <tbody>
+          ${names.map((n) => `
+            <tr>
+              <td>${escapeHtml(n)}</td>
+              <td class="bar-cell">
+                <div class="bar-track"><div class="bar-fill" style="width:${rates[n] * 100}%;background:${barColor(rates[n])}"></div></div>
+                <span>${pct(rates[n])}</span>
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  function failureTable(failures) {
+    const cats = Object.keys(failures);
+    if (!cats.length) return `<div class="empty">No failures — every test case passed.</div>`;
+    return `
+      <table>
+        <thead><tr><th>Category</th><th>Count</th><th>Test IDs</th></tr></thead>
+        <tbody>
+          ${cats.map((c) => `
+            <tr>
+              <td><span class="badge ${c}">${escapeHtml(c.replace(/_/g, " "))}</span></td>
+              <td>${failures[c].count}</td>
+              <td class="id-list">${failures[c].test_ids.map((id) => `<code>${escapeHtml(id)}</code>`).join(" ")}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  function failedResultsTable(results) {
+    if (!results.length) return `<div class="empty">None — every test case passed every evaluator.</div>`;
+    return `
+      <table>
+        <thead><tr><th>Test ID</th><th>Evaluator</th><th>Score</th><th>Category</th><th>Reason</th></tr></thead>
+        <tbody>
+          ${results.map((r) => `
+            <tr>
+              <td><code>${escapeHtml(r.test_id)}</code></td>
+              <td>${escapeHtml(r.evaluator)}</td>
+              <td>${num(r.score, 3)}${r.threshold != null ? ` <span style="color:var(--muted)">/ ${num(r.threshold, 3)}</span>` : ""}</td>
+              <td>${r.failure_category ? `<span class="badge ${r.failure_category}">${escapeHtml(r.failure_category.replace(/_/g, " "))}</span>` : "—"}</td>
+              <td style="color:var(--muted)">${escapeHtml(r.reason || "—")}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  // ---------- comparison view (mirrors regression.py's compare_runs) ----------
+
+  function compareRuns(baseline, candidate) {
+    if (baseline.dataset_id !== candidate.dataset_id) {
+      throw new Error(
+        `Cannot compare runs of different datasets ("${baseline.dataset_id}" vs "${candidate.dataset_id}") — ` +
+        `load two runs of the SAME dataset to compare them.`
+      );
+    }
+    const baseById = new Map();
+    for (const r of baseline.results) {
+      const key = `${r.test_id}::${r.evaluator}`;
+      baseById.set(key, r);
+    }
+    const regressed = new Set();
+    const newlyPassing = new Set();
+    for (const r of candidate.results) {
+      const key = `${r.test_id}::${r.evaluator}`;
+      const baseR = baseById.get(key);
+      if (!baseR) continue;
+      if (baseR.passed && !r.passed) regressed.add(r.test_id);
+      if (!baseR.passed && r.passed) newlyPassing.add(r.test_id);
+    }
+    return {
+      baseline_pass_rate: baseline.pass_rate,
+      candidate_pass_rate: candidate.pass_rate,
+      baseline_average_score: baseline.average_score,
+      candidate_average_score: candidate.average_score,
+      pass_rate_delta: candidate.pass_rate - baseline.pass_rate,
+      average_score_delta: candidate.average_score - baseline.average_score,
+      regressed_test_ids: Array.from(regressed).sort(),
+      newly_passing_test_ids: Array.from(newlyPassing).sort(),
+    };
+  }
+
+  function renderComparison(baseline, candidate) {
+    let report;
+    try {
+      report = compareRuns(baseline, candidate);
+    } catch (err) {
+      return `<div class="error-box" style="margin-top:20px">${escapeHtml(err.message)}</div>`;
+    }
+
+    return `
+      <section style="margin-top:0">
+        <h2>Comparing</h2>
+        <div class="cards">
+          <div class="card"><div class="label">Baseline</div><div class="value" style="font-size:15px">${escapeHtml(baseline.system_name)} <span style="color:var(--muted);font-size:12px">${escapeHtml(baseline.system_version || "")}</span></div><div class="sub">${escapeHtml(baseline.run_id)}</div></div>
+          <div class="card"><div class="label">Candidate</div><div class="value" style="font-size:15px">${escapeHtml(candidate.system_name)} <span style="color:var(--muted);font-size:12px">${escapeHtml(candidate.system_version || "")}</span></div><div class="sub">${escapeHtml(candidate.run_id)}</div></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Deltas</h2>
+        <div class="cards">
+          ${deltaCard("Pass rate", report.baseline_pass_rate, report.candidate_pass_rate, report.pass_rate_delta, pct)}
+          ${deltaCard("Average score", report.baseline_average_score, report.candidate_average_score, report.average_score_delta, (x) => num(x, 4))}
+        </div>
+      </section>
+
+      <section>
+        <h2>Regressions &amp; newly passing</h2>
+        <div class="cards">
+          <div class="card">
+            <div class="label">Regressed test cases</div>
+            <div class="value" style="color:${report.regressed_test_ids.length ? 'var(--bad)' : 'var(--good)'}">${report.regressed_test_ids.length}</div>
+            ${report.regressed_test_ids.length ? `<div class="sub id-list">${report.regressed_test_ids.map((id) => `<code>${escapeHtml(id)}</code>`).join(" ")}</div>` : ""}
+          </div>
+          <div class="card">
+            <div class="label">Newly passing</div>
+            <div class="value" style="color:var(--good)">${report.newly_passing_test_ids.length}</div>
+            ${report.newly_passing_test_ids.length ? `<div class="sub id-list">${report.newly_passing_test_ids.map((id) => `<code>${escapeHtml(id)}</code>`).join(" ")}</div>` : ""}
+          </div>
+        </div>
+      </section>
+
+      ${quailityGateSection([{ run: baseline }, { run: candidate }], report)}
+    `;
+  }
+
+  function deltaCard(label, base, cand, delta, fmt) {
+    const up = delta > 0, down = delta < 0;
+    const cls = up ? "delta-up" : down ? "delta-down" : "";
+    const sign = delta > 0 ? "+" : "";
+    return `
+      <div class="card">
+        <div class="label">${escapeHtml(label)}</div>
+        <div class="value">${fmt(cand)} <span class="${cls}" style="font-size:13px">${sign}${fmt(delta).replace("%", "pp")}</span></div>
+        <div class="sub">baseline: ${fmt(base)}</div>
+      </div>`;
+  }
+
+  // ---------- quality gate section (mirrors quality_gate.py's evaluate_quality_gate) ----------
+
+  function evaluateGate(run, minPassRate, minAvgScore, regressionReport) {
+    const violations = [];
+    if (minPassRate != null && run.pass_rate < minPassRate) {
+      violations.push(`pass_rate ${run.pass_rate.toFixed(4)} is below minimum ${minPassRate.toFixed(4)}`);
+    }
+    if (minAvgScore != null && run.average_score < minAvgScore) {
+      violations.push(`average_score ${run.average_score.toFixed(4)} is below minimum ${minAvgScore.toFixed(4)}`);
+    }
+    if (regressionReport && regressionReport.regressed_test_ids.length > 0) {
+      violations.push(`regression check failed: ${regressionReport.regressed_test_ids.length} test case(s) regressed (allowed: 0): ${regressionReport.regressed_test_ids.join(", ")}`);
+    }
+    return { passed: violations.length === 0, violations };
+  }
+
+  let gateState = { minPassRate: null, minAvgScore: null };
+
+  function quailityGateSection(runEntries, regressionReport) {
+    const candidate = runEntries[runEntries.length - 1].run;
+    return `
+      <section>
+        <h2>Quality gate</h2>
+        <div class="gate-panel">
+          <div class="gate-inputs">
+            <label>Min pass rate
+              <input type="number" id="gate-pass-rate" min="0" max="1" step="0.01" placeholder="unset" value="${gateState.minPassRate ?? ""}" />
+            </label>
+            <label>Min average score
+              <input type="number" id="gate-avg-score" min="0" max="1" step="0.01" placeholder="unset" value="${gateState.minAvgScore ?? ""}" />
+            </label>
+          </div>
+          <div id="gate-verdict"></div>
+        </div>
+      </section>
+    `;
+  }
+
+  function wireGateInputs() {
+    const passInput = document.getElementById("gate-pass-rate");
+    const scoreInput = document.getElementById("gate-avg-score");
+    if (!passInput) return; // no gate section rendered (no runs loaded)
+
+    function update() {
+      gateState.minPassRate = passInput.value === "" ? null : Number(passInput.value);
+      gateState.minAvgScore = scoreInput.value === "" ? null : Number(scoreInput.value);
+
+      const candidate = state.runs[state.runs.length - 1].run;
+      let regressionReport = null;
+      if (state.runs.length === 2) {
+        try { regressionReport = compareRuns(state.runs[0].run, state.runs[1].run); } catch (e) { /* mismatched datasets already shown above */ }
+      }
+      const result = evaluateGate(candidate, gateState.minPassRate, gateState.minAvgScore, regressionReport);
+      const verdictEl = document.getElementById("gate-verdict");
+      verdictEl.innerHTML = `
+        <div class="verdict ${result.passed ? "pass" : "fail"}">${result.passed ? "✓ PASSED" : "✗ FAILED"}</div>
+        ${result.violations.length ? `<ul class="violations">${result.violations.map((v) => `<li>${escapeHtml(v)}</li>`).join("")}</ul>` : ""}
+      `;
+    }
+    passInput.addEventListener("input", update);
+    scoreInput.addEventListener("input", update);
+    update();
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

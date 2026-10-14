@@ -1,0 +1,8 @@
+# Runtime dependencies. Deliberately minimal through Day 1 -- the data
+# model + loader only need Pydantic. FastAPI, the OpenAI SDK, etc. are
+# added in later requirements files as the days that need them land, the
+# same incremental pattern production-rag used.
+pydantic>=2.9,<3
+# JSONSchemaEvaluator (Day 4) -- real Draft 2020-12 validation rather than
+# a hand-rolled approximation.
+jsonschema>=4.23,<5

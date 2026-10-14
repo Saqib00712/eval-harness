@@ -1,0 +1,9 @@
+-r requirements.txt
+pytest>=8.3
+# SystemUnderTest.run() is async (Day 3) -- real systems do I/O (an OpenAI
+# call, a DB query), so the interface is async even though MockSystem's
+# canned responses don't need to be.
+pytest-asyncio>=0.24
+# Day 18's coverage audit, and Day 21's CI coverage-threshold gate, both
+# need this installed reproducibly rather than assumed present.
+coverage>=7.6

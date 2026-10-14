@@ -1,0 +1,104 @@
+# Day 21 (Phase 33): CI/CD for eval-harness itself.
+#
+# Two tiers, the same split production-rag's own Day 11 CI landed on:
+#
+#   1. `test` -- always runs, on every push and pull request, completely
+#      free. The full unit + integration suite needs zero paid API calls
+#      (every provider and adapter has a Fake* stand-in -- see
+#      docs/day6.md, day8.md, day19.md), so there is no reason this
+#      shouldn't gate every single push.
+#   2. `live-eval` -- only on a push to `main`, and only actually does
+#      anything if an `OPENAI_API_KEY` secret is configured on the repo.
+#      Runs `tests/live/`, which make a handful of real, billed OpenAI
+#      calls (a fraction of a cent total -- see tests/live/'s own
+#      docstrings) to prove the real providers work, not just their fakes.
+#      With no secret configured, every test in `tests/live/` self-skips
+#      (pytest.mark.skipif) rather than failing, so this job always
+#      succeeds either way -- it's additive, never a blocker.
+#
+# No `requirements-openai.txt` install in the `test` job on purpose: the
+# base suite must prove it works with ZERO AI SDKs installed (the exact
+# gap Day 6/Day 8 fixed for the embedding/judge providers), not just with
+# them conveniently present.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # requirements-httpx.txt (Day 19) IS installed here -- HttpxHttpClient
+      # is exercised unit-test-only via httpx.MockTransport (no network, no
+      # cost), so there's no reason to leave it uninstalled the way the
+      # paid OpenAI SDK is.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt -r requirements-httpx.txt
+
+      - name: Run test suite
+        run: python -m pytest -q
+
+      # Coverage threshold (Day 18's audit made this measurable in the
+      # first place). openai_embedding.py/openai_llm.py are omitted on
+      # purpose -- their real-call lines are only exercised by tests/live
+      # below, never by this free job, which never installs `openai` at
+      # all; counting them here would fail this job for a reason that has
+      # nothing to do with THIS job's own correctness.
+      - name: Coverage threshold (eval_harness/*, excluding OpenAI live-call modules)
+        run: |
+          python -m coverage run -m pytest -q
+          python -m coverage report \
+            --include="eval_harness/*" \
+            --omit="eval_harness/providers/openai_embedding.py,eval_harness/providers/openai_llm.py" \
+            --fail-under=98
+
+      # Smoke-tests scripts/demo_end_to_end.py (Day 20) end to end on every
+      # push -- entirely FakeHttpClient-backed, zero network, zero cost.
+      # Catches the exact failure mode Day 20's own docs called out: the
+      # demo's scripted story silently drifting (an import breaking, a
+      # module's shape changing under it) without any unit test noticing,
+      # since the demo script itself isn't imported by anything else.
+      - name: Run end-to-end demo script
+        run: python scripts/demo_end_to_end.py
+
+  live-eval:
+    name: live-eval (real OpenAI calls, main only)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies (including optional OpenAI SDK)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt -r requirements-openai.txt
+
+      - name: Run live tests (self-skips with no OPENAI_API_KEY secret configured)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python -m pytest tests/live -v
